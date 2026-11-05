@@ -5,68 +5,120 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>toio 傾きコントローラー</title>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; background: #111; color: #eee; }
-  button { font-size: 18px; padding: 14px; margin: 6px 0; width: 100%; border-radius: 10px; border: none; }
-  #connect { background: #2a7; color: #fff; }
-  #calib { background: #357; color: #fff; }
-  #stop { background: #c33; color: #fff; font-size: 24px; padding: 24px; }
-  #status, #values { font-family: monospace; margin: 8px 0; white-space: pre; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: system-ui, sans-serif; margin: 0; padding: 12px; background: #111; color: #eee;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  button { font-size: 18px; padding: 14px; border-radius: 10px; border: none; color: #fff; width: 100%; }
+  #left { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  #right { display: flex; flex-direction: column; gap: 12px; }
+  #connect { background: #2a7; }
+  #connect.connected { background: #777; }
+  #calib { background: #357; }
+  .drive { flex: 1; font-size: 32px; background: #335; touch-action: none; }
+  .drive.active { background: #57c; }
+  #status, #values { font-family: monospace; font-size: 13px; white-space: pre; overflow: hidden; }
+  #steer { position: relative; height: 18px; background: #222; border-radius: 9px; }
+  #steer::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #555; }
+  #steerBar { position: absolute; top: 0; bottom: 0; background: #e93; border-radius: 9px; }
 </style>
 </head>
 <body>
-  <button id="connect">toio に接続</button>
-  <button id="calib">今の傾きをゼロにする</button>
-  <button id="stop">停止</button>
-  <div id="status">未接続</div>
-  <div id="values"></div>
+  <div id="left">
+    <button id="connect">toio に接続</button>
+    <button id="calib">今の傾きをゼロにする</button>
+    <div id="steer"><div id="steerBar"></div></div>
+    <div id="status">未接続</div>
+    <div id="values"></div>
+  </div>
+  <div id="right">
+    <button id="forward" class="drive">▲ 前進</button>
+    <button id="back" class="drive">▼ 後退</button>
+  </div>
 
 <script>
 const SERVICE_UUID = "10b20100-5b3b-4571-9508-cf3efcd7bbae";
 const MOTOR_UUID   = "10b20102-5b3b-4571-9508-cf3efcd7bbae";
 
-const MAX_SPEED = 115;   // toio のモーター最大指示値
-const MIN_SPEED = 10;    // これ未満は動かないので 0 扱い
-const TILT_RANGE = 40;   // この角度(度)傾けたら最大速度
-const DEADZONE = 5;      // この角度以内は無視
-const SEND_INTERVAL = 50; // ms
+const MAX_SPEED = 115;     // toio のモーター最大指示値
+const MIN_SPEED = 10;      // これ未満は動かないので 0 扱い
+const FORWARD_SPEED = 50;
+const BACK_SPEED = 30;
+const TURN_SPEED = 40;     // 最大まで傾けたときの左右差（片側分）
+const STEER_GAIN = 1.5;    // 約40度（sin≈0.67）傾けたら最大旋回
+const DEADZONE = 0.08;     // 約5度以内は無視
+const SEND_INTERVAL = 50;  // ms
 
+let device = null;
 let motor = null;
 let writing = false;
-let stopped = false;
-let beta = 0, gamma = 0;      // 現在の傾き
-let beta0 = 0, gamma0 = 0;    // キャリブレーション値
+let forwardPressed = false, backPressed = false;
+let steerRaw = 0;          // 画面の左右方向の傾き（-1〜1、右に傾けると +）
+let steer0 = 0;            // キャリブレーション値
+let orientationListening = false;
 
 const $ = (id) => document.getElementById(id);
 const setStatus = (s) => { $("status").textContent = s; };
 
-// 接続ボタン：傾きの許可 → BLE接続 を同じタップ内で行う
+// 画面の回転角（縦持ち 0、横持ちで 90 / -90 / 270）
+function screenAngle() {
+  return screen.orientation?.angle ?? window.orientation ?? 0;
+}
+
+// deviceorientation から「上」方向ベクトルを端末座標で求め、
+// 画面の右方向とのなす量をハンドルの切れ角として使う（平置きでもハンドル持ちでも同じように効く）
+function onOrientation(e) {
+  const b = (e.beta ?? 0) * Math.PI / 180;
+  const g = (e.gamma ?? 0) * Math.PI / 180;
+  const ux = -Math.sin(g) * Math.cos(b);
+  const uy = Math.sin(b);
+  const t = screenAngle() * Math.PI / 180;
+  // 画面の右方向（端末座標）= (cos t, -sin t)。右側が下がると上ベクトルとの内積が負になる
+  steerRaw = -(ux * Math.cos(t) - uy * Math.sin(t));
+}
+
+function updateConnectButton() {
+  const btn = $("connect");
+  btn.textContent = motor ? "toio から切断" : "toio に接続";
+  btn.classList.toggle("connected", !!motor);
+}
+
 $("connect").addEventListener("click", async () => {
+  if (motor) {
+    await sendMotor(0, 0, true);
+    device?.gatt.disconnect();
+    return;
+  }
   try {
     // 1. 傾きセンサーの許可（iOS は必須、ユーザー操作の中で呼ぶ）
-    if (typeof DeviceOrientationEvent !== "undefined" &&
-        typeof DeviceOrientationEvent.requestPermission === "function") {
-      const p = await DeviceOrientationEvent.requestPermission();
-      if (p !== "granted") { setStatus("傾きの許可が得られませんでした"); return; }
+    if (!orientationListening) {
+      if (typeof DeviceOrientationEvent !== "undefined" &&
+          typeof DeviceOrientationEvent.requestPermission === "function") {
+        const p = await DeviceOrientationEvent.requestPermission();
+        if (p !== "granted") { setStatus("傾きの許可が得られませんでした"); return; }
+      }
+      window.addEventListener("deviceorientation", onOrientation);
+      orientationListening = true;
     }
-    window.addEventListener("deviceorientation", (e) => {
-      beta = e.beta ?? 0;
-      gamma = e.gamma ?? 0;
-    });
 
     // 2. BLE 接続
     if (!navigator.bluetooth) { setStatus("このブラウザは Web Bluetooth 非対応です"); return; }
     setStatus("toio を探しています…");
-    const device = await navigator.bluetooth.requestDevice({
+    device = await navigator.bluetooth.requestDevice({
       filters: [{ services: [SERVICE_UUID] }],
     });
     device.addEventListener("gattserverdisconnected", () => {
       motor = null;
+      updateConnectButton();
       setStatus("切断されました");
     });
     const server = await device.gatt.connect();
     const service = await server.getPrimaryService(SERVICE_UUID);
     motor = await service.getCharacteristic(MOTOR_UUID);
-    stopped = false;
+    updateConnectButton();
     setStatus("接続しました：" + (device.name || "toio"));
 
     // 画面が消えないようにする（対応環境のみ）
@@ -76,29 +128,32 @@ $("connect").addEventListener("click", async () => {
   }
 });
 
-$("calib").addEventListener("click", () => {
-  beta0 = beta;
-  gamma0 = gamma;
-});
+$("calib").addEventListener("click", () => { steer0 = steerRaw; });
 
-$("stop").addEventListener("click", async () => {
-  stopped = !stopped;
-  $("stop").textContent = stopped ? "再開" : "停止";
-  if (stopped) await sendMotor(0, 0, true);
-});
-
-// 角度 → -1〜1
-function axis(deg) {
-  if (Math.abs(deg) < DEADZONE) return 0;
-  const v = (Math.abs(deg) - DEADZONE) / (TILT_RANGE - DEADZONE);
-  return Math.sign(deg) * Math.min(v, 1);
+// 押している間だけ走る
+function bindHold(id, set) {
+  const el = $(id);
+  const on = (e) => { e.preventDefault(); el.setPointerCapture?.(e.pointerId); set(true); el.classList.add("active"); };
+  const off = () => { set(false); el.classList.remove("active"); };
+  el.addEventListener("pointerdown", on);
+  el.addEventListener("pointerup", off);
+  el.addEventListener("pointercancel", off);
+  el.addEventListener("lostpointercapture", off);
+  el.addEventListener("contextmenu", (e) => e.preventDefault());
 }
+bindHold("forward", (v) => { forwardPressed = v; });
+bindHold("back", (v) => { backPressed = v; });
 
-// -1〜1 → toio の [向き, 速度]
-function toMotor(v) {
-  let speed = Math.round(Math.min(Math.abs(v), 1) * MAX_SPEED);
-  if (speed < MIN_SPEED) speed = 0;
-  return [v >= 0 ? 0x01 : 0x02, speed];
+// 画面から離れたら止める
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { forwardPressed = backPressed = false; sendMotor(0, 0, true); }
+});
+
+// 符号付き速度 → toio の [向き, 速度]
+function toMotor(speed) {
+  let s = Math.round(Math.min(Math.abs(speed), MAX_SPEED));
+  if (s < MIN_SPEED) s = 0;
+  return [speed >= 0 ? 0x01 : 0x02, s];
 }
 
 async function sendMotor(left, right, force = false) {
@@ -113,20 +168,30 @@ async function sendMotor(left, right, force = false) {
   finally { writing = false; }
 }
 
+function steerValue() {
+  const s = steerRaw - steer0;
+  if (Math.abs(s) < DEADZONE) return 0;
+  return Math.max(-1, Math.min(1, s * STEER_GAIN));
+}
+
 setInterval(() => {
-  // 画面を上にして手前に持つ想定：奥に倒す＝前進、左右に倒す＝旋回
-  const forward = axis(-(beta - beta0));
-  const turn    = axis(gamma - gamma0);
-  let left  = forward + turn;
-  let right = forward - turn;
-  const m = Math.max(1, Math.abs(left), Math.abs(right));
-  left /= m; right /= m;
+  const steer = steerValue();
 
+  // 前進と後退を同時押し・どちらも押していない → 停止
+  let base = 0, turn = 0;
+  if (forwardPressed && !backPressed) { base = FORWARD_SPEED; turn = steer * TURN_SPEED; }
+  else if (backPressed && !forwardPressed) { base = -BACK_SPEED; turn = -steer * TURN_SPEED; } // 車のバックと同じ向きに曲がる
+  const left = base + turn;
+  const right = base - turn;
+
+  const bar = $("steerBar");
+  bar.style.left = (50 + Math.min(0, steer) * 50) + "%";
+  bar.style.width = (Math.abs(steer) * 50) + "%";
   $("values").textContent =
-    `beta ${(beta - beta0).toFixed(1)}  gamma ${(gamma - gamma0).toFixed(1)}\n` +
-    `L ${left.toFixed(2)}  R ${right.toFixed(2)}`;
+    `steer ${steer.toFixed(2)} (raw ${(steerRaw - steer0).toFixed(2)})\n` +
+    `L ${Math.round(left)}  R ${Math.round(right)}`;
 
-  if (!stopped) sendMotor(left, right);
+  sendMotor(left, right);
 }, SEND_INTERVAL);
 </script>
 </body>
