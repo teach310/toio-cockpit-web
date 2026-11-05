@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>toio 傾きコントローラー</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; background: #111; color: #eee; }
+  button { font-size: 18px; padding: 14px; margin: 6px 0; width: 100%; border-radius: 10px; border: none; }
+  #connect { background: #2a7; color: #fff; }
+  #calib { background: #357; color: #fff; }
+  #stop { background: #c33; color: #fff; font-size: 24px; padding: 24px; }
+  #status, #values { font-family: monospace; margin: 8px 0; white-space: pre; }
+</style>
+</head>
+<body>
+  <button id="connect">toio に接続</button>
+  <button id="calib">今の傾きをゼロにする</button>
+  <button id="stop">停止</button>
+  <div id="status">未接続</div>
+  <div id="values"></div>
+
+<script>
+const SERVICE_UUID = "10b20100-5b3b-4571-9508-cf3efcd7bbae";
+const MOTOR_UUID   = "10b20102-5b3b-4571-9508-cf3efcd7bbae";
+
+const MAX_SPEED = 115;   // toio のモーター最大指示値
+const MIN_SPEED = 10;    // これ未満は動かないので 0 扱い
+const TILT_RANGE = 40;   // この角度(度)傾けたら最大速度
+const DEADZONE = 5;      // この角度以内は無視
+const SEND_INTERVAL = 50; // ms
+
+let motor = null;
+let writing = false;
+let stopped = false;
+let beta = 0, gamma = 0;      // 現在の傾き
+let beta0 = 0, gamma0 = 0;    // キャリブレーション値
+
+const $ = (id) => document.getElementById(id);
+const setStatus = (s) => { $("status").textContent = s; };
+
+// 接続ボタン：傾きの許可 → BLE接続 を同じタップ内で行う
+$("connect").addEventListener("click", async () => {
+  try {
+    // 1. 傾きセンサーの許可（iOS は必須、ユーザー操作の中で呼ぶ）
+    if (typeof DeviceOrientationEvent !== "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission === "function") {
+      const p = await DeviceOrientationEvent.requestPermission();
+      if (p !== "granted") { setStatus("傾きの許可が得られませんでした"); return; }
+    }
+    window.addEventListener("deviceorientation", (e) => {
+      beta = e.beta ?? 0;
+      gamma = e.gamma ?? 0;
+    });
+
+    // 2. BLE 接続
+    if (!navigator.bluetooth) { setStatus("このブラウザは Web Bluetooth 非対応です"); return; }
+    setStatus("toio を探しています…");
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [SERVICE_UUID] }],
+    });
+    device.addEventListener("gattserverdisconnected", () => {
+      motor = null;
+      setStatus("切断されました");
+    });
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    motor = await service.getCharacteristic(MOTOR_UUID);
+    stopped = false;
+    setStatus("接続しました：" + (device.name || "toio"));
+
+    // 画面が消えないようにする（対応環境のみ）
+    try { await navigator.wakeLock?.request("screen"); } catch (_) {}
+  } catch (err) {
+    setStatus("エラー: " + err.message);
+  }
+});
+
+$("calib").addEventListener("click", () => {
+  beta0 = beta;
+  gamma0 = gamma;
+});
+
+$("stop").addEventListener("click", async () => {
+  stopped = !stopped;
+  $("stop").textContent = stopped ? "再開" : "停止";
+  if (stopped) await sendMotor(0, 0, true);
+});
+
+// 角度 → -1〜1
+function axis(deg) {
+  if (Math.abs(deg) < DEADZONE) return 0;
+  const v = (Math.abs(deg) - DEADZONE) / (TILT_RANGE - DEADZONE);
+  return Math.sign(deg) * Math.min(v, 1);
+}
+
+// -1〜1 → toio の [向き, 速度]
+function toMotor(v) {
+  let speed = Math.round(Math.min(Math.abs(v), 1) * MAX_SPEED);
+  if (speed < MIN_SPEED) speed = 0;
+  return [v >= 0 ? 0x01 : 0x02, speed];
+}
+
+async function sendMotor(left, right, force = false) {
+  if (!motor || (writing && !force)) return;
+  writing = true;
+  const [dl, sl] = toMotor(left);
+  const [dr, sr] = toMotor(right);
+  // 0x01: 時間指定なしモーター制御 / 左モーター(0x01) / 右モーター(0x02)
+  const data = new Uint8Array([0x01, 0x01, dl, sl, 0x02, dr, sr]);
+  try { await motor.writeValueWithoutResponse(data); }
+  catch (_) {}
+  finally { writing = false; }
+}
+
+setInterval(() => {
+  // 画面を上にして手前に持つ想定：奥に倒す＝前進、左右に倒す＝旋回
+  const forward = axis(-(beta - beta0));
+  const turn    = axis(gamma - gamma0);
+  let left  = forward + turn;
+  let right = forward - turn;
+  const m = Math.max(1, Math.abs(left), Math.abs(right));
+  left /= m; right /= m;
+
+  $("values").textContent =
+    `beta ${(beta - beta0).toFixed(1)}  gamma ${(gamma - gamma0).toFixed(1)}\n` +
+    `L ${left.toFixed(2)}  R ${right.toFixed(2)}`;
+
+  if (!stopped) sendMotor(left, right);
+}, SEND_INTERVAL);
+</script>
+</body>
+</html>
