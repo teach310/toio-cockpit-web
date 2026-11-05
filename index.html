@@ -83,16 +83,18 @@
 
   /* 中央: メーター */
   #center { grid-area: center; display: flex; flex-direction: column; min-width: 0; min-height: 0; gap: 8px; }
-  #gaugeWrap { flex: 1; min-height: 0; position: relative; }
+  #gaugeWrap { flex: 1; min-height: 0; container-type: size; display: flex; align-items: center; justify-content: center; }
+  /* メーターの縦横比 (220:200) を保ったまま、入る大きさにする。HORN の位置をメーターに合わせるため */
+  #gaugeBox { position: relative; width: min(100cqw, 110cqh); aspect-ratio: 220 / 200; }
   #gauge { position: absolute; inset: 0; width: 100%; height: 100%; }
   #gauge text { font-family: "Orbitron", system-ui, sans-serif; }
-  #horn { cursor: pointer; }
-  #horn circle.face { fill: var(--button); stroke: var(--button-edge); stroke-width: 1; }
-  #horn circle.shadow { fill: #000; }
-  #horn.pressed { transform: translateY(2px); }
-  #horn.pressed circle.face { fill: var(--orange); stroke: var(--orange); filter: drop-shadow(0 0 6px var(--orange)); }
-  #horn.pressed circle.shadow { opacity: 0; }
-  #horn.pressed text { fill: var(--bg); }
+  #horn {
+    --accent: var(--orange);
+    position: absolute; left: 50%; top: 50%; width: 31%; aspect-ratio: 1; transform: translate(-50%, -50%);
+    border-radius: 50%; font-size: clamp(9px, 4.5cqh, 14px); font-weight: 700; touch-action: none;
+  }
+  #horn:active { transform: translate(-50%, -50%); }
+  #horn.pressed { transform: translate(-50%, calc(-50% + var(--depth))); background: var(--orange); color: var(--bg); box-shadow: 0 0 16px var(--orange); }
   #bottomRow { display: flex; gap: 10px; height: 46px; flex: none; }
   .meter { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 0 10px; min-width: 0; }
   .meterHead { display: flex; justify-content: space-between; font-size: 9px; color: var(--dim); }
@@ -138,19 +140,17 @@
 
   <div id="center">
     <div id="gaugeWrap">
-      <svg id="gauge" viewBox="0 0 220 200" preserveAspectRatio="xMidYMid meet">
-        <g id="segments"></g>
-        <g id="ticks"></g>
-        <circle id="needle" r="5" fill="#dce4f0" style="display:none"/>
-        <g id="horn" style="display:none">
-          <circle class="shadow" cx="110" cy="102" r="34"/>
-          <circle class="face" cx="110" cy="100" r="34"/>
-          <text x="110" y="104" text-anchor="middle" font-size="11" font-weight="700" fill="#dce4f0">HORN</text>
-        </g>
-        <text id="detail" x="110" y="104" text-anchor="middle" font-size="9" fill="#dce4f0" style="font-family: system-ui, sans-serif">toio に接続してください</text>
-        <text id="speedText" x="110" y="176" text-anchor="middle" font-size="30" font-weight="900" fill="#505868">0</text>
-        <text x="110" y="192" text-anchor="middle" font-size="7" fill="#505868">km/h</text>
-      </svg>
+      <div id="gaugeBox">
+        <svg id="gauge" viewBox="0 0 220 200" preserveAspectRatio="xMidYMid meet">
+          <g id="segments"></g>
+          <g id="ticks"></g>
+          <circle id="needle" r="5" fill="#dce4f0" style="display:none"/>
+          <text id="detail" x="110" y="104" text-anchor="middle" font-size="9" fill="#dce4f0" style="font-family: system-ui, sans-serif">toio に接続してください</text>
+          <text id="speedText" x="110" y="176" text-anchor="middle" font-size="30" font-weight="900" fill="#505868">0</text>
+          <text x="110" y="192" text-anchor="middle" font-size="7" fill="#505868">km/h</text>
+        </svg>
+        <button id="horn" class="btn" style="display:none">HORN</button>
+      </div>
     </div>
     <div id="bottomRow">
       <div id="battery" class="meter">
