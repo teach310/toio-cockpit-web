@@ -99,9 +99,8 @@
   .meterHead b { color: var(--text); font-weight: 700; }
   .bar { position: relative; height: 9px; border: 1px solid var(--dim); border-radius: 3px; overflow: hidden; }
   .bar i { position: absolute; top: 1px; bottom: 1px; }
-  #battery { border-radius: 10px; background: var(--panel); }
+  #battery, #steerBox { border-radius: 10px; background: var(--panel); }
   #batteryFill { left: 1px; width: 0; background: var(--green); }
-  #steerBox { --accent: var(--cyan); }
   #steerBar::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--dim); }
   #steerFill { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
 
@@ -158,10 +157,10 @@
         <div class="meterHead"><span>TOIO</span><b id="batteryText">--</b></div>
         <div class="bar"><i id="batteryFill"></i></div>
       </div>
-      <button id="steerBox" class="btn meter">
-        <div class="meterHead"><span>STEER TILT</span><b>TAP=ZERO</b></div>
+      <div id="steerBox" class="meter">
+        <div class="meterHead"><span>STEER</span><b>TILT</b></div>
         <div class="bar" id="steerBar"><i id="steerFill"></i></div>
-      </button>
+      </div>
     </div>
   </div>
 
@@ -192,6 +191,8 @@ const MIN_SPEED = 10;      // これ未満は動かないので 0 扱い
 const TURN_RATIO = 0.4;    // 最大まで傾けたときの左右差（片側分）。走る速さに対する割合
 const STEER_GAIN = 1.2;    // 約55度（sin≈0.83）傾けたら最大旋回
 const DEADZONE = 0.08;     // 約5度以内は無視
+const ACCEL = 80;          // 加速の速さ（1秒あたりに上がる速度）
+const DECEL = 140;         // 減速の速さ（1秒あたりに下がる速度）
 const SEND_INTERVAL = 50;  // ms
 const HORN_NOTE = 64;      // クラクションの MIDI ノート
 const HORN_VOLUME = 255;
@@ -202,7 +203,6 @@ let motorQueued = false;
 let gattChain = Promise.resolve();
 let forwardPressed = false, backPressed = false;
 let steerRaw = 0;          // 画面の左右方向の傾き（-1〜1、右に傾けると +）
-let steer0 = 0;            // キャリブレーション値
 let orientationListening = false;
 let speedGear = 1;
 let throttle = 0;          // 今の速さ (-100〜100)。メーター表示用
@@ -353,7 +353,7 @@ function onOrientation(e) {
 }
 
 function steerValue() {
-  const s = steerRaw - steer0;
+  const s = steerRaw;
   if (Math.abs(s) < DEADZONE) return 0;
   return Math.max(-1, Math.min(1, s * STEER_GAIN));
 }
@@ -416,8 +416,6 @@ $("speedGear").addEventListener("click", () => {
   updateSpeedGear();
 });
 
-$("steerBox").addEventListener("click", () => { steer0 = steerRaw; });
-
 // 押している間だけ効くボタン
 function bindHold(el, set) {
   const on = (e) => { e.preventDefault(); el.setPointerCapture?.(e.pointerId); el.classList.add("pressed"); set(true); };
@@ -468,14 +466,22 @@ setInterval(() => {
   const g = SPEED_GEARS[speedGear];
 
   // 前進と後退を同時押し・どちらも押していない → 停止
-  let base = 0, turn = 0;
-  if (forwardPressed && !backPressed) { base = g.forward; turn = steer * g.forward * TURN_RATIO; }
-  else if (backPressed && !forwardPressed) { base = -g.back; turn = -steer * g.back * TURN_RATIO; } // 車のバックと同じ向きに曲がる
-  throttle = motor ? base : 0;
+  let target = 0;
+  if (forwardPressed && !backPressed) target = g.forward;
+  else if (backPressed && !forwardPressed) target = -g.back;
+  if (!motor) target = 0;
+
+  // 目標の速さへ少しずつ近づける。速くなるときは ACCEL、遅くなるとき（向きが変わるときも）は DECEL
+  const speedingUp = Math.abs(target) > Math.abs(throttle) && (throttle === 0 || Math.sign(target) === Math.sign(throttle));
+  const step = (speedingUp ? ACCEL : DECEL) * SEND_INTERVAL / 1000;
+  throttle = Math.abs(target - throttle) <= step ? target : throttle + Math.sign(target - throttle) * step;
+
+  // 曲がる量は今の速さに合わせる。後退中は車のバックと同じ向きに曲がる
+  const turn = steer * throttle * TURN_RATIO;
 
   updateSteer(steer);
   updateGear();
-  sendMotor(base + turn, base - turn);
+  sendMotor(throttle + turn, throttle - turn);
 }, SEND_INTERVAL);
 
 buildGauge();
