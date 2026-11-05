@@ -121,6 +121,15 @@
   #batteryFill { left: 1px; width: 0; background: var(--green); }
   #steerBar::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--dim); }
   #steerFill { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+  /* 傾きの向きは長押しで反転する。子どもが間違えて変えないよう長押し */
+  #steerBox { position: relative; overflow: hidden; touch-action: none; }
+  #steerBox::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+    background: color-mix(in srgb, var(--cyan) 25%, transparent);
+  }
+  #steerBox.holding::before { width: 100%; transition: width var(--hold) linear; }
+  #steerBox > * { position: relative; }
+  #steerMode.reverse { color: var(--orange); }
 
   /* 右: 前進・後退 */
   #right { grid-area: right; display: flex; flex-direction: column; gap: 14px; padding-bottom: var(--depth); min-height: 0; }
@@ -175,7 +184,7 @@
         <div class="bar"><i id="batteryFill"></i></div>
       </div>
       <div id="steerBox" class="meter">
-        <div class="meterHead"><span>STEER</span><b>TILT</b></div>
+        <div class="meterHead"><span>STEER</span><b id="steerMode">TILT</b></div>
         <div class="bar" id="steerBar"><i id="steerFill"></i></div>
       </div>
     </div>
@@ -210,6 +219,7 @@ const STEER_GAIN = 1.2;    // 約55度（sin≈0.83）傾けたら最大旋回
 const DEADZONE = 0.08;     // 約5度以内は無視
 const SPIN_SPEED = 100;    // SPIN を押している間、その場で右に回る速さ
 const DISCONNECT_HOLD_MS = 1500; // この時間 CONNECT を長押ししたら切断する
+const STEER_REVERSE_HOLD_MS = 1500; // この時間 STEER を長押ししたら傾きの向きを反転する
 const ACCEL = 80;         // 加速の速さ（1秒あたりに上がる速度）
 const DECEL = 140;         // 減速の速さ（1秒あたりに下がる速度）
 const SEND_INTERVAL = 50;  // ms
@@ -236,6 +246,8 @@ let shownSpeed = 0;        // 針をなめらかに動かすための表示用�
 const $ = (id) => document.getElementById(id);
 
 try { speedGear = Math.min(SPEED_GEARS.length - 1, Math.max(0, +(localStorage.getItem("speedGear") ?? 1))); } catch (_) {}
+let steerReverse = false;  // 機種によって傾きの向きが逆になることがあるので、STEER の長押しで反転できる
+try { steerReverse = localStorage.getItem("steerReverse") === "1"; } catch (_) {}
 
 function setStatus(text, tone = "cyan") {
   $("statusText").textContent = text;
@@ -378,10 +390,36 @@ function onOrientation(e) {
 }
 
 function steerValue() {
-  const s = steerRaw;
+  const s = steerReverse ? -steerRaw : steerRaw;
   if (Math.abs(s) < DEADZONE) return 0;
   return Math.max(-1, Math.min(1, s * STEER_GAIN));
 }
+
+function updateSteerMode() {
+  $("steerMode").textContent = steerReverse ? "TILT REV" : "TILT";
+  $("steerMode").classList.toggle("reverse", steerReverse);
+}
+
+// STEER を STEER_REVERSE_HOLD_MS 長押しすると傾きの向きを反転し、端末に保存する
+let steerHoldTimer = null;
+function cancelSteerHold() {
+  clearTimeout(steerHoldTimer);
+  steerHoldTimer = null;
+  $("steerBox").classList.remove("holding");
+}
+$("steerBox").style.setProperty("--hold", STEER_REVERSE_HOLD_MS + "ms");
+$("steerBox").addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  $("steerBox").classList.add("holding");
+  steerHoldTimer = setTimeout(() => {
+    cancelSteerHold();
+    steerReverse = !steerReverse;
+    try { localStorage.setItem("steerReverse", steerReverse ? "1" : "0"); } catch (_) {}
+    updateSteerMode();
+  }, STEER_REVERSE_HOLD_MS);
+});
+["pointerup", "pointercancel", "pointerleave"].forEach((t) => $("steerBox").addEventListener(t, cancelSteerHold));
+$("steerBox").addEventListener("contextmenu", (e) => e.preventDefault());
 
 // ---- 接続 ----
 // 接続中は DISCONNECT_HOLD_MS 長押しで切断。途中で離したら何もしない
@@ -583,6 +621,7 @@ if (new URLSearchParams(location.search).has("debug")) {
   const log = (m) => { lines.unshift(m); lines.length = Math.min(lines.length, 14); box.textContent = lines.join("\n"); };
   const vv = window.visualViewport;
   const viewInfo = () => `view ${innerWidth}x${innerHeight} scroll ${scrollX},${scrollY}` +
+    ` angle ${screen.orientation?.angle ?? "-"} / ${window.orientation ?? "-"}` +
     (vv ? ` vv ${Math.round(vv.width)}x${Math.round(vv.height)} @${vv.offsetLeft},${vv.offsetTop} x${vv.scale.toFixed(2)}` : "");
   log(viewInfo());
   const dot = (x, y, color) => {
@@ -608,6 +647,7 @@ if (new URLSearchParams(location.search).has("debug")) {
 
 buildGauge();
 updateSpeedGear();
+updateSteerMode();
 updateConnection();
 updateGear();
 requestAnimationFrame(drawGauge);
