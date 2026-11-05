@@ -5,6 +5,8 @@
 
 **https://teach310.github.io/toio-cockpit-web/**
 
+![走っているときの画面（LOW で前進しながら右に曲がっている）](docs/screenshot.png)
+
 ## 必要なもの
 
 - toio コア キューブ
