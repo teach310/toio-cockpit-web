@@ -239,6 +239,7 @@ let forwardPressed = false, backPressed = false, hornPressed = false, spinPresse
 let lastSound = STOP_SOUND; // 最後に鳴らした音。同じ音を送り直さないために使う
 let steerRaw = 0;          // 画面の左右方向の傾き（-1〜1、右に傾けると +）
 let orientationListening = false;
+let debugOrientation = null; // ?debug のときだけ、傾きの計算の途中の値を出す
 let speedGear = 1;
 let throttle = 0;          // 今の速さ (-100〜100)。メーター表示用
 let shownSpeed = 0;        // 針をなめらかに動かすための表示用の値
@@ -372,10 +373,14 @@ function updateSteer(steer) {
 }
 
 // ---- 傾き ----
-// 画面の回転角（縦持ち 0、横持ちで 90 / -90 / 270）
+// 画面の回転角（縦持ち 0、横持ちで 90 / -90 / 270）。機種やブラウザによって当てにならないので、最初の推定にだけ使う
 function screenAngle() {
   return screen.orientation?.angle ?? window.orientation ?? 0;
 }
+
+// 横持ちのとき、画面の上が端末の +x 側なら 1、-x 側なら -1。0 はまだ分からない
+let landscapeUp = 0;
+const LANDSCAPE_UP_THRESHOLD = 0.4; // 端末の x 軸がこれ以上（約24度）立っているときだけ、どちらが上かを決め直す
 
 // deviceorientation から「上」方向ベクトルを端末座標で求め、
 // 画面の右方向とのなす量をハンドルの切れ角として使う（平置きでもハンドル持ちでも同じように効く）
@@ -384,9 +389,17 @@ function onOrientation(e) {
   const g = (e.gamma ?? 0) * Math.PI / 180;
   const ux = -Math.sin(g) * Math.cos(b);
   const uy = Math.sin(b);
-  const t = screenAngle() * Math.PI / 180;
-  // 画面の右方向（端末座標）= (cos t, -sin t)。右側が下がると上ベクトルとの内積が負になる
-  steerRaw = -(ux * Math.cos(t) - uy * Math.sin(t));
+  if (innerWidth <= innerHeight) {
+    // 縦持ち: 画面の右方向は端末の +x。右側が下がると ux が負になる
+    steerRaw = -ux;
+    return;
+  }
+  // 横持ち: 画面の上側は少し持ち上げて持つので、上ベクトルの x 成分の符号で、どちら向きに横にしたかが分かる
+  if (Math.abs(ux) > LANDSCAPE_UP_THRESHOLD) landscapeUp = Math.sign(ux);
+  else if (landscapeUp === 0) landscapeUp = Math.sin(screenAngle() * Math.PI / 180) < 0 ? -1 : 1;
+  // 画面の右方向は、上が +x なら端末の -y、上が -x なら +y
+  steerRaw = landscapeUp * uy;
+  debugOrientation?.(`angle ${screenAngle()} up ${landscapeUp} ux ${ux.toFixed(2)} uy ${uy.toFixed(2)}`);
 }
 
 function steerValue() {
@@ -618,7 +631,12 @@ if (new URLSearchParams(location.search).has("debug")) {
   box.style.cssText = "position:fixed;left:100px;top:40px;right:35vw;z-index:99;font:11px/1.3 monospace;color:#0f0;background:#000c;pointer-events:none;white-space:pre-wrap;max-height:60vh;overflow:hidden;padding:4px";
   document.body.appendChild(box);
   const lines = [];
-  const log = (m) => { lines.unshift(m); lines.length = Math.min(lines.length, 14); box.textContent = lines.join("\n"); };
+  const orientationLine = document.createElement("div");
+  orientationLine.style.color = "#ff0";
+  const logLines = document.createElement("div");
+  box.append(orientationLine, logLines);
+  debugOrientation = (m) => { orientationLine.textContent = m; };
+  const log = (m) => { lines.unshift(m); lines.length = Math.min(lines.length, 14); logLines.textContent = lines.join("\n"); };
   const vv = window.visualViewport;
   const viewInfo = () => `view ${innerWidth}x${innerHeight} scroll ${scrollX},${scrollY}` +
     ` angle ${screen.orientation?.angle ?? "-"} / ${window.orientation ?? "-"}` +
