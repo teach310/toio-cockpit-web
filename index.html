@@ -85,7 +85,7 @@
   #center { grid-area: center; display: flex; flex-direction: column; min-width: 0; min-height: 0; gap: 8px; }
   #gaugeWrap { flex: 1; min-height: 0; container-type: size; display: flex; align-items: center; justify-content: center; }
   /* メーターの縦横比 (220:200) を保ったまま、入る大きさにする。HORN の位置をメーターに合わせるため */
-  #gaugeBox { position: relative; width: min(100cqw, 110cqh); aspect-ratio: 220 / 200; }
+  #gaugeBox { position: relative; width: min(100cqw, 110cqh); aspect-ratio: 220 / 200; touch-action: none; }
   #gauge { position: absolute; inset: 0; width: 100%; height: 100%; }
   #gauge text { font-family: "Orbitron", system-ui, sans-serif; }
   #horn {
@@ -93,7 +93,7 @@
     position: absolute; left: 50%; top: 50%; width: 31%; aspect-ratio: 1; transform: translate(-50%, -50%);
     border-radius: 50%; font-size: clamp(9px, 4.5cqh, 14px); font-weight: 700; touch-action: none;
   }
-  #horn:active { transform: translate(-50%, -50%); }
+  #horn { pointer-events: none; } /* 当たり判定は #gaugeBox でメーターの中心からの距離で取る */
   #horn.pressed { transform: translate(-50%, calc(-50% + var(--depth))); background: var(--orange); color: var(--bg); box-shadow: 0 0 16px var(--orange); }
   #bottomRow { display: flex; gap: 10px; height: 46px; flex: none; }
   .meter { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 0 10px; min-width: 0; }
@@ -435,11 +435,39 @@ function bindHold(el, set) {
 }
 bindHold($("forward"), (v) => { forwardPressed = v; });
 bindHold($("back"), (v) => { backPressed = v; });
-bindHold($("horn"), (v) => { hornPressed = v; });
+// HORN はメーターの中心から HORN_HIT_R 以内に触れたら押したことにする（見た目より広め）
+const HORN_HIT_R = 56;     // メーターの座標 (220x200) での半径。HORN の見た目は 34
+function isHornHit(e) {
+  const r = $("gaugeBox").getBoundingClientRect();
+  const scale = r.width / 220;
+  const dx = (e.clientX - r.left) / scale - GAUGE.cx;
+  const dy = (e.clientY - r.top) / scale - GAUGE.cy;
+  return dx * dx + dy * dy <= HORN_HIT_R * HORN_HIT_R;
+}
+let hornPointer = null;
+function setHorn(v) {
+  hornPressed = v;
+  $("horn").classList.toggle("pressed", v);
+  refreshSound(); // 短く押しただけでも鳴るよう、次の周期を待たずに送る
+}
+$("gaugeBox").addEventListener("pointerdown", (e) => {
+  if (!motor || hornPointer !== null || !isHornHit(e)) return;
+  e.preventDefault();
+  hornPointer = e.pointerId;
+  $("gaugeBox").setPointerCapture?.(e.pointerId);
+  setHorn(true);
+});
+const releaseHorn = (e) => {
+  if (e.pointerId !== hornPointer) return;
+  hornPointer = null;
+  setHorn(false);
+};
+["pointerup", "pointercancel", "lostpointercapture"].forEach((t) => $("gaugeBox").addEventListener(t, releaseHorn));
+$("gaugeBox").addEventListener("contextmenu", (e) => e.preventDefault());
 
 // 画面から離れたら止める
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { forwardPressed = backPressed = hornPressed = false; sendMotor(0, 0, true); }
+  if (document.hidden) { forwardPressed = backPressed = false; hornPointer = null; setHorn(false); sendMotor(0, 0, true); }
 });
 
 // ---- 走り ----
@@ -470,6 +498,11 @@ function updateSound(data) {
   enqueue(() => s.writeValueWithResponse(new Uint8Array(data))).catch(() => {});
 }
 
+// クラクションボタンを押している間はクラクション。それ以外で後ろに動いている間はバック音
+function refreshSound() {
+  updateSound(hornPressed ? HORN_SOUND : throttle < 0 ? BACKUP_SOUND : STOP_SOUND);
+}
+
 setInterval(() => {
   const steer = steerValue();
   const g = SPEED_GEARS[speedGear];
@@ -491,9 +524,7 @@ setInterval(() => {
   updateSteer(steer);
   updateGear();
   sendMotor(throttle + turn, throttle - turn);
-
-  // クラクションボタンを押している間はクラクション。それ以外で後ろに動いている間はバック音
-  updateSound(hornPressed ? HORN_SOUND : throttle < 0 ? BACKUP_SOUND : STOP_SOUND);
+  refreshSound();
 }, SEND_INTERVAL);
 
 buildGauge();
