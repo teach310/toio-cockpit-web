@@ -194,14 +194,20 @@ const DEADZONE = 0.08;     // 約5度以内は無視
 const ACCEL = 80;          // 加速の速さ（1秒あたりに上がる速度）
 const DECEL = 140;         // 減速の速さ（1秒あたりに下がる速度）
 const SEND_INTERVAL = 50;  // ms
-const HORN_NOTE = 64;      // クラクションの MIDI ノート
-const HORN_VOLUME = 255;
+// toio の MIDI 再生データ: [0x03, 繰り返し回数(0は無限), 音の数, (長さ[10ms], ノート番号, 音量)...]
+// toio の効果音には合うものがないので作る。ノート番号 128 は無音
+// クラクション: 低めの1音(F4)をそのまま伸ばす。太い「ブーッ」
+const HORN_SOUND = [0x03, 0, 1, 100, 65, 255];
+// バック音: 「ピーッ、ピーッ」(E5を0.4秒鳴らして0.4秒休む)
+const BACKUP_SOUND = [0x03, 0, 2, 40, 76, 160, 40, 128, 0];
+const STOP_SOUND = [0x01];
 
 let device = null;
 let motor = null, sound = null;
 let motorQueued = false;
 let gattChain = Promise.resolve();
-let forwardPressed = false, backPressed = false;
+let forwardPressed = false, backPressed = false, hornPressed = false;
+let lastSound = STOP_SOUND; // 最後に鳴らした音。同じ音を送り直さないために使う
 let steerRaw = 0;          // 画面の左右方向の傾き（-1〜1、右に傾けると +）
 let orientationListening = false;
 let speedGear = 1;
@@ -393,6 +399,7 @@ $("connect").addEventListener("click", async () => {
     const service = await server.getPrimaryService(SERVICE_UUID);
     const m = await service.getCharacteristic(MOTOR_UUID);
     try { sound = await service.getCharacteristic(SOUND_UUID); } catch (_) {}
+    lastSound = STOP_SOUND;
     try {
       const battery = await service.getCharacteristic(BATTERY_UUID);
       battery.addEventListener("characteristicvaluechanged", (e) => setBattery(e.target.value.getUint8(0)));
@@ -428,16 +435,11 @@ function bindHold(el, set) {
 }
 bindHold($("forward"), (v) => { forwardPressed = v; });
 bindHold($("back"), (v) => { backPressed = v; });
-bindHold($("horn"), (v) => {
-  if (!sound) return;
-  // 0x03: MIDI 再生 / 繰り返し 0 = 無限 / 1音: 1秒・ノート・音量。離したら 0x01 で止める
-  const data = v ? new Uint8Array([0x03, 0x00, 0x01, 100, HORN_NOTE, HORN_VOLUME]) : new Uint8Array([0x01]);
-  enqueue(() => sound.writeValueWithResponse(data)).catch(() => {});
-});
+bindHold($("horn"), (v) => { hornPressed = v; });
 
 // 画面から離れたら止める
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { forwardPressed = backPressed = false; sendMotor(0, 0, true); }
+  if (document.hidden) { forwardPressed = backPressed = hornPressed = false; sendMotor(0, 0, true); }
 });
 
 // ---- 走り ----
@@ -461,6 +463,13 @@ function sendMotor(left, right, force = false) {
     .finally(() => { motorQueued = false; });
 }
 
+function updateSound(data) {
+  if (!sound || data === lastSound) return;
+  lastSound = data;
+  const s = sound;
+  enqueue(() => s.writeValueWithResponse(new Uint8Array(data))).catch(() => {});
+}
+
 setInterval(() => {
   const steer = steerValue();
   const g = SPEED_GEARS[speedGear];
@@ -482,6 +491,9 @@ setInterval(() => {
   updateSteer(steer);
   updateGear();
   sendMotor(throttle + turn, throttle - turn);
+
+  // クラクションボタンを押している間はクラクション。それ以外で後ろに動いている間はバック音
+  updateSound(hornPressed ? HORN_SOUND : throttle < 0 ? BACKUP_SOUND : STOP_SOUND);
 }, SEND_INTERVAL);
 
 buildGauge();
