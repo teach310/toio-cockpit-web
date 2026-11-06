@@ -14,7 +14,15 @@
 - toio コア キューブ
 - Web Bluetooth に対応したブラウザ
   - Android: Chrome
-  - iPhone: Bluefy（App Store で入手）（Safari と iPhone 版 Chrome は Web Bluetooth に対応していない）
+  - iPhone: [Bluefy](https://apps.apple.com/jp/app/bluefy-web-ble-browser/id1492822055)（App Store で入手）（Safari と iPhone 版 Chrome は Web Bluetooth に対応していない）
+
+### iPhone: Bluefy で直接開く
+
+Bluefy がインストール済みの iPhone では、次のリンクから Bluefy で直接開ける（Bluefy 未インストールだと開けないので、先に App Store から入手する）。
+
+<a href="bluefy://open?url=https://teach310.github.io/toio-cockpit-web/">Bluefyブラウザでtoio COCKPITを開く</a>
+
+- [Bluefy を App Store で入手](https://apps.apple.com/jp/app/bluefy-web-ble-browser/id1492822055)
 
 ## 使い方
 
