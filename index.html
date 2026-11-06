@@ -149,8 +149,10 @@
   }
   #rotate svg { width: 72px; fill: none; stroke: var(--cyan); stroke-width: 3; }
   @media (orientation: portrait) { #rotate { display: flex; } }
-  #rotateBluefy { margin-top: 16px; text-align: center; font-size: 14px; line-height: 2.2; color: var(--red); }
-  #rotateBluefy a { color: var(--cyan); font-size: 16px; font-weight: 700; }
+  #rotateBluefy { margin-top: 16px; text-align: center; font-size: 14px; line-height: 2.2; }
+  #rotateBluefy span { color: var(--red); }
+  #rotateBluefy a { color: var(--cyan); font-weight: 700; }
+  #rotateBluefy br + a { font-size: 16px; }
 </style>
 </head>
 <body>
@@ -201,7 +203,7 @@
   <div id="rotate">
     <svg viewBox="0 0 48 48"><rect x="14" y="6" width="20" height="36" rx="3"/><path d="M40 30a16 16 0 0 1-12 12m0 0 4-1m-4 1 1-4"/></svg>
     横向きにして使ってください
-    <div id="rotateBluefy" hidden>このブラウザは Web Bluetooth 非対応です<br></div>
+    <div id="rotateBluefy" hidden><span>このブラウザは Web Bluetooth 非対応です</span><br></div>
   </div>
 
 <script>
@@ -265,14 +267,21 @@ if (!navigator.bluetooth) {
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   setStatus("このブラウザは Web Bluetooth 非対応です", "red");
   if (isIOS) {
-    const bluefyLink = () => {
+    const link = (href, text) => {
       const a = document.createElement("a");
-      a.href = "bluefy://open?url=" + location.href.split("#")[0];
-      a.textContent = "Bluefy で開く";
+      a.href = href;
+      a.textContent = text;
       return a;
     };
-    $("statusText").append("　", bluefyLink());
-    $("rotateBluefy").append(bluefyLink());  // 縦持ちの「横向きにして」画面にも出す
+    const openUrl = "bluefy://open?url=" + location.href.split("#")[0];
+    const storeUrl = "https://apps.apple.com/jp/app/bluefy-web-ble-browser/id1492822055";
+    $("statusText").textContent = "Web Bluetooth 非対応です";  // 横幅が狭いので短くする
+    $("brand").style.display = "none";  // リンクが切れないようロゴの分を空ける
+    $("statusText").style.flex = "1";
+    $("statusText").append("　", link(openUrl, "Bluefy で開く"), "｜", link(storeUrl, "App Store で入手"));
+    // 縦持ちの「横向きにして」画面にも出す
+    $("rotateBluefy").append(link(openUrl, "Bluefy で開く"), document.createElement("br"),
+      "Bluefy が無ければ ", link(storeUrl, "App Store で入手"));
     $("rotateBluefy").hidden = false;
   }
 }
