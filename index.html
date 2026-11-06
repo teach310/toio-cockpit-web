@@ -49,6 +49,7 @@
   }
   #statusDot { width: 10px; height: 10px; border-radius: 50%; background: var(--tone); box-shadow: 0 0 8px var(--tone); flex: none; }
   #statusText { font-family: system-ui, sans-serif; font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #statusText a { color: var(--cyan); }
   #brand { margin-left: auto; font-size: 10px; color: var(--dim); letter-spacing: 0.1em; white-space: nowrap; }
 
   /* 押せるボタン。影で浮かせ、押している間は沈めて accent の色にする */
@@ -253,6 +254,19 @@ try { steerReverse = localStorage.getItem("steerReverse") === "1"; } catch (_) {
 function setStatus(text, tone = "cyan") {
   $("statusText").textContent = text;
   document.documentElement.style.setProperty("--tone", `var(--${tone})`);
+}
+
+// Web Bluetooth が無いブラウザでは開いた時点で知らせる。iPhone / iPad なら Bluefy で開き直すリンクを出す
+if (!navigator.bluetooth) {
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  setStatus("このブラウザは Web Bluetooth 非対応です", "red");
+  if (isIOS) {
+    const a = document.createElement("a");
+    a.href = "bluefy://open?url=" + location.href.split("#")[0];
+    a.textContent = "Bluefy で開く";
+    $("statusText").append("　", a);
+  }
 }
 
 // Web Bluetooth は同時に1つしか書けないので、書き込みは順番に並べる
