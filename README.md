@@ -1,10 +1,10 @@
 # toio-cockpit-web
 
-ブラウザから toio を操作する Web ページ。ボタンで前後に走り、スマホの傾きで曲がる。toio コア キューブと、Web Bluetooth に対応したブラウザ（Android は Chrome）で以下の URL を開く。
+ブラウザから toio を操作する Web ページ。ボタンで前後に走り、スマホの傾きで曲がる。URLは以下
 
 [**https://teach310.github.io/toio-cockpit-web/**](https://teach310.github.io/toio-cockpit-web/)
 
-iPhone の Safari と Chrome は Web Bluetooth に対応していないため、[Bluefy](https://apps.apple.com/jp/app/bluefy-web-ble-browser/id1492822055) を入れて、その中で上の URL を開く（iPhone の Safari などで開くと、画面上部に Bluefy で開き直すリンクが出る）。
+iPhone の Safari と Chrome は Web Bluetooth に対応していないため、[Bluefy](https://apps.apple.com/jp/app/bluefy-web-ble-browser/id1492822055) アプリのインストールが必要です
 
 ![走っているときの画面（LOW で前進しながら右に曲がっている）](docs/screenshot.png)
 
