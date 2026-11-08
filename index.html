@@ -704,8 +704,8 @@ setInterval(() => {
 
 // ---- オートモード ----
 // 位置を測れないので、時間で動かす。曲がる角度がずれるときは TURN_DEG_PER_SEC を実機に合わせる
-const TURN_SPEED = 30;          // その場で曲がるときの左右の速さ
-const TURN_DEG_PER_SEC = 300;   // TURN_SPEED でその場で回ったときの 1秒あたりの角度（目安）
+const TURN_SPEED = 20;          // その場で曲がるときの左右の速さ
+const TURN_DEG_PER_SEC = 200;   // TURN_SPEED でその場で回ったときの 1秒あたりの角度（目安）
 const turnMs = (deg) => Math.round(Math.abs(deg) / TURN_DEG_PER_SEC * 1000);
 const turn = (deg) => ({ l: Math.sign(deg) * TURN_SPEED, r: -Math.sign(deg) * TURN_SPEED, ms: turnMs(deg) });
 const go = (l, r, ms) => ({ l, r, ms });
@@ -713,10 +713,10 @@ const rest = (ms) => ({ l: 0, r: 0, ms });
 
 // 動き: 終わったら最初から繰り返す
 const MOTIONS = {
-  circle: [go(70, 30, 2000)],
-  square: [go(60, 60, 1000), rest(200), turn(90), rest(200)],
-  eight: [go(70, 30, 2600), go(30, 70, 2600)],
-  dance: [turn(45), turn(-90), turn(45), go(50, 50, 300), go(-50, -50, 300), go(50, 50, 300), go(-50, -50, 300), turn(360), rest(300)],
+  circle: [go(45, 20, 3000)],
+  square: [go(40, 40, 1500), rest(300), turn(90), rest(300)],
+  eight: [go(45, 20, 4000), go(20, 45, 4000)],
+  dance: [turn(45), turn(-90), turn(45), go(35, 35, 450), go(-35, -35, 450), go(35, 35, 450), go(-35, -35, 450), turn(360), rest(300)],
 };
 
 // 曲: [ノート番号, 拍] の並び。ノート番号 128 は休み。C4 = 60
@@ -735,13 +735,13 @@ function melody(beatMs, notes, repeat = 1) {
 }
 const [C4, D4, E4, F4, G4, A4, Ab4, Bb4, C5, G5, B5] = [60, 62, 64, 65, 67, 69, 68, 70, 72, 79, 83];
 const MUSIC = {
-  twinkle: melody(400, [
+  twinkle: melody(550, [
     [C4, 1], [C4, 1], [G4, 1], [G4, 1], [A4, 1], [A4, 1], [G4, 2],
     [F4, 1], [F4, 1], [E4, 1], [E4, 1], [D4, 1], [D4, 1], [C4, 2],
     [G4, 1], [G4, 1], [F4, 1], [F4, 1], [E4, 1], [E4, 1], [D4, 2],
     [G4, 1], [G4, 1], [F4, 1], [F4, 1], [E4, 1], [E4, 1], [D4, 2],
   ]),
-  frog: melody(400, [
+  frog: melody(550, [
     [C4, 1], [D4, 1], [E4, 1], [F4, 1], [E4, 1], [D4, 1], [C4, 2],
     [E4, 1], [F4, 1], [G4, 1], [A4, 1], [G4, 1], [F4, 1], [E4, 2],
     [C4, 2], [C4, 2], [C4, 2], [C4, 2],
