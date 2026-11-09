@@ -109,14 +109,16 @@
   /* オートモード: 決まった動き4つと曲4つ。もう一度押すと止まる */
   #auto {
     display: none; grid-row: 2; grid-column: 1 / -1; min-height: 0;
-    grid-template-columns: 52px repeat(4, 1fr); grid-template-rows: repeat(3, 1fr); gap: 10px;
-    padding-bottom: var(--depth);
+    /* ボタンが増えたので縦にスクロールする。次の段が少しのぞく高さにして、続きがあると分かるようにする */
+    grid-template-columns: 52px repeat(4, 1fr); grid-auto-rows: calc((100% - 20px) / 3.3); gap: 10px;
+    padding-bottom: var(--depth); overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch;
   }
   body.auto #auto { display: grid; }
   body.auto #left, body.auto #center, body.auto #right { display: none; }
   .autoLabel { display: flex; align-items: center; justify-content: center; font-family: system-ui, sans-serif; font-size: 13px; font-weight: 700; color: var(--dim); writing-mode: vertical-rl; letter-spacing: 0.3em; }
-  .autoLabel.music { grid-row: span 2; }
+  .autoLabel.music { grid-row: span 3; }
   .autoBtn {
+    touch-action: pan-y;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 0;
     color: var(--accent); font-family: system-ui, sans-serif; font-size: 14px; font-weight: 700; white-space: nowrap;
   }
@@ -247,6 +249,10 @@
     <button class="btn autoBtn music" data-music="bee"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="14" rx="5" ry="6"/><path d="M7.5 12h9M7.5 16h9M10 8c-2-4-6-3-5 0s5 1 5 0M14 8c2-4 6-3 5 0s-5 1-5 0"/></svg>ぶんぶんぶん</button>
     <button class="btn autoBtn music" data-music="butterfly"><svg viewBox="0 0 24 24"><path d="M12 7v13M12 10C9 4 3 4 4 9s6 3 8 2M12 10c3-6 9-6 8-1s-6 3-8 2M12 12c-3 1-7 3-5 6s5-3 5-4M12 12c3 1 7 3 5 6s-5-3-5-4"/></svg>ちょうちょう</button>
     <button class="btn autoBtn music" data-music="london"><svg viewBox="0 0 24 24"><path d="M2 9h20M2 19h20M5 9v10M19 9v10M5 19a7 7 0 0 1 14 0M8 9V5h8v4"/></svg>ロンドンばし</button>
+    <button class="btn autoBtn music" data-music="fireTruck"><svg viewBox="0 0 24 24"><path d="M2 17V9h11v8M13 11h4l4 4v2M2 17h19"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/><path d="M4 6h8M5 9V6M9 9V6"/></svg>しょうぼうしゃ</button>
+    <button class="btn autoBtn music" data-music="fart"><svg viewBox="0 0 24 24"><path d="M5 14a3 3 0 0 1 1-5.8A4 4 0 0 1 13.5 7a3.5 3.5 0 0 1 4.5 4.5A2.5 2.5 0 0 1 17 16H6a3 3 0 0 1-1-2zM8 19l-1 2M12 19v2M16 19l1 2"/></svg>オナラ</button>
+    <button class="btn autoBtn music" data-music="chime"><svg viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0 1 12 0v6l2 2H4zM10 21h4M12 3v2"/></svg>チャイム</button>
+    <button class="btn autoBtn music" data-music="correct"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>ピンポン</button>
   </div>
 
   <div id="rotate">
@@ -742,6 +748,15 @@ function melody(beatMs, notes, repeat = 1) {
 }
 const [C4, D4, E4, F4, G4, A4, Ab4, Bb4, C5, G5, B5] = [60, 62, 64, 65, 67, 69, 68, 70, 72, 79, 83];
 const R = 128;
+const [D5, E5, C6, E6] = [74, 76, 84, 88];
+
+// 音の高さを細かく上げ下げして、サイレンのように音が滑らかに変わって聞こえるようにする
+function glide(from, to, stepBeats) {
+  const dir = Math.sign(to - from);
+  const out = [];
+  for (let n = from; n !== to; n += dir) out.push([n, stepBeats]);
+  return out;
+}
 const MUSIC = {
   twinkle: melody(550, [
     [C4, 1], [C4, 1], [G4, 1], [G4, 1], [A4, 1], [A4, 1], [G4, 2],
@@ -775,6 +790,20 @@ const MUSIC = {
     [G4, 1], [E4, 1], [E4, 1], [E4, 1], [F4, 1], [D4, 1], [D4, 1], [D4, 1],
     [C4, 1], [E4, 1], [G4, 1], [G4, 1], [E4, 1], [E4, 1], [E4, 2],
   ]),
+  // 消防車: 「ウーー」と上がって伸ばし、下がる
+  fireTruck: melody(30, [...glide(67, 81, 2), [81, 50], ...glide(81, 67, 3), [67, 6]], 3),
+  // オナラ: 低い音を短く揺らして「ブッ」「ブブ」「ブゥ〜」
+  fart: melody(10, [
+    [40, 6], [R, 8], [38, 4], [41, 3], [R, 6],
+    [43, 3], [40, 3], [44, 3], [39, 3], [42, 3], [38, 3], [41, 3], [37, 3], [40, 4], [36, 6], [35, 10],
+  ]),
+  // 学校のチャイム（ウェストミンスターの鐘）
+  chime: melody(700, [
+    [E5, 1], [C5, 1], [D5, 1], [G4, 2], [G4, 1], [D5, 1], [E5, 1], [C5, 2],
+    [E5, 1], [D5, 1], [C5, 1], [G4, 2], [G4, 1], [D5, 1], [E5, 1], [C5, 3],
+  ]),
+  // 正解のピンポーン
+  correct: melody(150, [[E6, 1], [C6, 6]]),
   london: melody(450, [
     [G4, 1.5], [A4, 0.5], [G4, 1], [F4, 1], [E4, 1], [F4, 1], [G4, 2],
     [D4, 1], [E4, 1], [F4, 2], [E4, 1], [F4, 1], [G4, 2],
