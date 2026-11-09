@@ -116,7 +116,6 @@
   body.auto #auto { display: grid; }
   body.auto #left, body.auto #center, body.auto #right { display: none; }
   .autoLabel { display: flex; align-items: center; justify-content: center; font-family: system-ui, sans-serif; font-size: 13px; font-weight: 700; color: var(--dim); writing-mode: vertical-rl; letter-spacing: 0.3em; }
-  .autoLabel.music { grid-row: span 4; }
   .autoBtn {
     touch-action: pan-y;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 0;
@@ -257,6 +256,7 @@
     <button class="btn autoBtn music" data-music="yankee"><svg viewBox="0 0 24 24"><path d="M2 20l7-13 4 7 2-3 7 9zM7.5 10l1.5 1 1.5-1"/></svg>アルプス</button>
     <button class="btn autoBtn music" data-music="jingle"><svg viewBox="0 0 24 24"><path d="M12 2l4 6h-2l4 6h-3l4 6H5l4-6H6l4-6H8zM12 20v2"/></svg>ジングルベル</button>
     <button class="btn autoBtn music" data-music="joy"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>よろこびのうた</button>
+    <button class="btn autoBtn music" data-music="police"><svg viewBox="0 0 24 24"><path d="M3 17v-4l2-4h14l2 4v4zM3 17h18M9 9V6h6v3"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>パトカー</button>
   </div>
 
   <div id="rotate">
@@ -797,6 +797,8 @@ const MUSIC = {
   ]),
   // 消防車: 「ウーー」と上がって伸ばし、下がる
   fireTruck: melody(30, [...glide(67, 81, 2), [81, 50], ...glide(81, 67, 3), [67, 6]], 3),
+  // パトカー: 消防車より速く「ウ〜ウ〜」と上がり下がりを繰り返す
+  police: melody(30, [...glide(67, 79, 1.5), [79, 4], ...glide(79, 67, 1.5), [67, 4]], 5),
   // オナラ: 低い音を短く揺らして「ブッ」「ブブ」「ブゥ〜」
   fart: melody(10, [
     [40, 6], [R, 8], [38, 4], [41, 3], [R, 6],
@@ -915,6 +917,8 @@ document.querySelectorAll("[data-motion]").forEach((b) => b.addEventListener("cl
   if (!motor) { setStatus("先に CONNECT で toio に接続してください", "yellow"); return; }
   if (motionKey === b.dataset.motion) stopMotion(); else runMotion(b.dataset.motion);
 }));
+// 「おと」の見出しを、曲のボタンの段数ぶん縦に伸ばす
+document.querySelector(".autoLabel.music").style.gridRow = `span ${Math.ceil(document.querySelectorAll("[data-music]").length / 4)}`;
 document.querySelectorAll("[data-music]").forEach((b) => b.addEventListener("click", () => {
   if (!motor) { setStatus("先に CONNECT で toio に接続してください", "yellow"); return; }
   if (musicKey === b.dataset.music) stopMusic(); else playMusic(b.dataset.music);
