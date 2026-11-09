@@ -116,7 +116,7 @@
   body.auto #auto { display: grid; }
   body.auto #left, body.auto #center, body.auto #right { display: none; }
   .autoLabel { display: flex; align-items: center; justify-content: center; font-family: system-ui, sans-serif; font-size: 13px; font-weight: 700; color: var(--dim); writing-mode: vertical-rl; letter-spacing: 0.3em; }
-  .autoLabel.music { grid-row: span 3; }
+  .autoLabel.music { grid-row: span 4; }
   .autoBtn {
     touch-action: pan-y;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 0;
@@ -253,6 +253,10 @@
     <button class="btn autoBtn music" data-music="fart"><svg viewBox="0 0 24 24"><path d="M5 14a3 3 0 0 1 1-5.8A4 4 0 0 1 13.5 7a3.5 3.5 0 0 1 4.5 4.5A2.5 2.5 0 0 1 17 16H6a3 3 0 0 1-1-2zM8 19l-1 2M12 19v2M16 19l1 2"/></svg>オナラ</button>
     <button class="btn autoBtn music" data-music="chime"><svg viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0 1 12 0v6l2 2H4zM10 21h4M12 3v2"/></svg>チャイム</button>
     <button class="btn autoBtn music" data-music="correct"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>ピンポン</button>
+    <button class="btn autoBtn music" data-music="birthday"><svg viewBox="0 0 24 24"><path d="M4 21V13h16v8M3 21h18M4 16c2 1.5 4 1.5 6 0s4-1.5 6 0 3 1 4 0M8 13V9M12 13V9M16 13V9M8 6v.5M12 6v.5M16 6v.5"/></svg>おたんじょうび</button>
+    <button class="btn autoBtn music" data-music="yankee"><svg viewBox="0 0 24 24"><path d="M2 20l7-13 4 7 2-3 7 9zM7.5 10l1.5 1 1.5-1"/></svg>アルプス</button>
+    <button class="btn autoBtn music" data-music="jingle"><svg viewBox="0 0 24 24"><path d="M12 2l4 6h-2l4 6h-3l4 6H5l4-6H6l4-6H8zM12 20v2"/></svg>ジングルベル</button>
+    <button class="btn autoBtn music" data-music="joy"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>よろこびのうた</button>
   </div>
 
   <div id="rotate">
@@ -749,6 +753,7 @@ function melody(beatMs, notes, repeat = 1) {
 const [C4, D4, E4, F4, G4, A4, Ab4, Bb4, C5, G5, B5] = [60, 62, 64, 65, 67, 69, 68, 70, 72, 79, 83];
 const R = 128;
 const [D5, E5, C6, E6] = [74, 76, 84, 88];
+const [G3, A3, B3, B4, F5] = [55, 57, 59, 71, 77];
 
 // 音の高さを細かく上げ下げして、サイレンのように音が滑らかに変わって聞こえるようにする
 function glide(from, to, stepBeats) {
@@ -801,6 +806,33 @@ const MUSIC = {
   chime: melody(700, [
     [E5, 1], [C5, 1], [D5, 1], [G4, 2], [G4, 1], [D5, 1], [E5, 1], [C5, 2],
     [E5, 1], [D5, 1], [C5, 1], [G4, 2], [G4, 1], [D5, 1], [E5, 1], [C5, 3],
+  ]),
+  // ハッピーバースデー（3拍子）
+  birthday: melody(450, [
+    [G4, 0.75], [G4, 0.25], [A4, 1], [G4, 1], [C5, 1], [B4, 2],
+    [G4, 0.75], [G4, 0.25], [A4, 1], [G4, 1], [D5, 1], [C5, 2],
+    [G4, 0.75], [G4, 0.25], [G5, 1], [E5, 1], [C5, 1], [B4, 1], [A4, 2],
+    [F5, 0.75], [F5, 0.25], [E5, 1], [C5, 1], [D5, 1], [C5, 3],
+  ]),
+  // アルプス一万尺（ヤンキードゥードゥル）
+  yankee: melody(300, [
+    [C4, 1], [C4, 1], [D4, 1], [E4, 1], [C4, 1], [E4, 1], [D4, 1], [G3, 1],
+    [C4, 1], [C4, 1], [D4, 1], [E4, 1], [C4, 2], [B3, 2],
+    [C4, 1], [C4, 1], [D4, 1], [E4, 1], [F4, 1], [E4, 1], [D4, 1], [C4, 1],
+    [B3, 1], [G3, 1], [A3, 1], [B3, 1], [C4, 2], [C4, 2],
+  ]),
+  jingle: melody(300, [
+    [E4, 1], [E4, 1], [E4, 2], [E4, 1], [E4, 1], [E4, 2],
+    [E4, 1], [G4, 1], [C4, 1.5], [D4, 0.5], [E4, 4],
+    [F4, 1], [F4, 1], [F4, 1.5], [F4, 0.5], [F4, 1], [E4, 1], [E4, 1], [E4, 0.5], [E4, 0.5],
+    [G4, 1], [G4, 1], [F4, 1], [D4, 1], [C4, 4],
+  ]),
+  // よろこびのうた（ベートーヴェン 第九）
+  joy: melody(450, [
+    [E4, 1], [E4, 1], [F4, 1], [G4, 1], [G4, 1], [F4, 1], [E4, 1], [D4, 1],
+    [C4, 1], [C4, 1], [D4, 1], [E4, 1], [E4, 1.5], [D4, 0.5], [D4, 2],
+    [E4, 1], [E4, 1], [F4, 1], [G4, 1], [G4, 1], [F4, 1], [E4, 1], [D4, 1],
+    [C4, 1], [C4, 1], [D4, 1], [E4, 1], [D4, 1.5], [C4, 0.5], [C4, 2],
   ]),
   // 正解のピンポーン
   correct: melody(150, [[E6, 1], [C6, 6]]),
