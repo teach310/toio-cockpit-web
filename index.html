@@ -124,6 +124,7 @@
   .autoBtn svg { width: 40%; max-width: 44px; height: auto; max-height: 45%; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   .autoBtn.motion { --accent: var(--cyan); }
   .autoBtn.music { --accent: var(--yellow); }
+  .autoBtn.long { font-size: 12px; }
   .autoBtn.active {
     transform: translateY(var(--depth)); color: var(--bg);
     box-shadow: 0 0 0 #000, 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent);
@@ -257,6 +258,7 @@
     <button class="btn autoBtn music" data-music="jingle"><svg viewBox="0 0 24 24"><path d="M12 2l4 6h-2l4 6h-3l4 6H5l4-6H6l4-6H8zM12 20v2"/></svg>ジングルベル</button>
     <button class="btn autoBtn music" data-music="joy"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>よろこびのうた</button>
     <button class="btn autoBtn music" data-music="police"><svg viewBox="0 0 24 24"><path d="M3 17v-4l2-4h14l2 4v4zM3 17h18M9 9V6h6v3"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>パトカー</button>
+    <button class="btn autoBtn music long" data-music="snow"><svg viewBox="0 0 24 24"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9 4l3 2 3-2M9 20l3-2 3 2M4 10.5l2.5-1-.5-3M20 13.5l-2.5 1 .5 3M4 13.5l2.5 1-.5 3M20 10.5l-2.5-1 .5-3"/></svg>ゆきのペンキやさん</button>
   </div>
 
   <div id="rotate">
@@ -736,19 +738,29 @@ const MOTIONS = {
 };
 
 // 曲: [ノート番号, 拍] の並び。ノート番号 128 は休み。C4 = 60
+// toio が一度に受け取れるのは 59 音まで。長い曲は分けて、前の分が鳴り終わるころに次を送る
+const MAX_NOTES = 59;
 function melody(beatMs, notes, repeat = 1) {
-  const data = [0x03, repeat, 0];
-  let total = 0;
+  const parts = [];
+  let entries = [], ms = 0;
+  const flush = () => {
+    if (!entries.length) return;
+    parts.push({ data: [0x03, repeat, entries.length, ...entries.flat()], ms: ms * repeat });
+    entries = []; ms = 0;
+  };
   notes.forEach(([note, beats], i) => {
     const d = Math.round(beats * beatMs / 10);
-    // 同じ音が続くときだけ、区切れて聞こえるよう少し休む（toio が一度に受け取れる音の数を節約する）
-    const gap = note !== 128 && notes[i + 1]?.[0] === note ? 3 : 0;
-    data.push(d - gap, note, note === 128 ? 0 : 200);
-    if (gap) data.push(gap, 128, 0);
-    total += d * 10;
+    // 同じ音が続くときだけ、区切れて聞こえるよう少し休む（音の数を節約する）
+    const gap = note !== R && notes[i + 1]?.[0] === note ? 3 : 0;
+    const add = [[d - gap, note, note === R ? 0 : 200]];
+    if (gap) add.push([gap, R, 0]);
+    if (entries.length + add.length > MAX_NOTES) flush();
+    entries.push(...add);
+    ms += d * 10;
   });
-  data[2] = (data.length - 3) / 3; // toio が一度に受け取れるのは 59 音まで
-  return { data, ms: total * repeat };
+  flush();
+  if (repeat > 1 && parts.length > 1) throw new Error("繰り返す曲は 59 音以内にする");
+  return { parts, ms: parts.reduce((sum, p) => sum + p.ms, 0) };
 }
 const [C4, D4, E4, F4, G4, A4, Ab4, Bb4, C5, G5, B5] = [60, 62, 64, 65, 67, 69, 68, 70, 72, 79, 83];
 const R = 128;
@@ -797,6 +809,21 @@ const MUSIC = {
   ]),
   // 消防車: 「ウーー」と上がって伸ばし、下がる
   fireTruck: melody(30, [...glide(67, 81, 2), [81, 50], ...glide(81, 67, 3), [67, 6]], 3),
+  // 雪のペンキやさん（ヘ長調 2/4、♩=96）
+  snow: melody(625, [
+    [A4, 1], [C5, 0.5], [A4, 0.5],
+    [F4, 0.5], [F4, 0.25], [F4, 0.25], [F4, 0.5], [G4, 0.5],
+    [A4, 0.5], [A4, 0.25], [A4, 0.25], [A4, 0.5], [F4, 0.5],
+    [A4, 0.5], [F4, 0.25], [F4, 0.25], [F4, 0.5], [R, 0.5],
+    [G4, 0.5], [G4, 0.5], [G4, 0.5], [C4, 0.5],
+    [A4, 0.5], [A4, 0.5], [A4, 0.5], [F4, 0.5],
+    [Bb4, 0.5], [Bb4, 0.5], [Bb4, 0.5], [G4, 0.5],
+    [C5, 0.5], [C5, 0.5], [C5, 0.5], [R, 0.5],
+    [D5, 0.75], [D5, 0.25], [C5, 0.5], [A4, 0.5],
+    [C5, 0.75], [C5, 0.25], [A4, 0.5], [F4, 0.5],
+    [G4, 0.5], [G4, 0.5], [G4, 0.5], [A4, 0.5],
+    [F4, 1.5], [R, 0.5],
+  ]),
   // パトカー: 消防車より速く「ウ〜ウ〜」と上がり下がりを繰り返す
   police: melody(30, [...glide(67, 79, 1.5), [79, 4], ...glide(79, 67, 1.5), [67, 4]], 5),
   // オナラ: 低い音を短く揺らして「ブッ」「ブブ」「ブゥ〜」
@@ -848,7 +875,7 @@ const MUSIC = {
 
 let autoMode = false;
 let motionKey = null, motionToken = 0;
-let musicKey = null, musicTimer = null;
+let musicKey = null;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function updateAutoButtons() {
@@ -893,16 +920,22 @@ function stopMotion() {
   updateAutoButtons();
 }
 
+let musicTimers = [];
 function playMusic(key) {
-  clearTimeout(musicTimer);
+  musicTimers.forEach(clearTimeout);
   musicKey = key;
-  updateSound(MUSIC[key].data);
-  musicTimer = setTimeout(stopMusic, MUSIC[key].ms + 200);
+  let at = 0;
+  musicTimers = MUSIC[key].parts.map((part) => {
+    const t = setTimeout(() => updateSound(part.data), at);
+    at += part.ms;
+    return t;
+  });
+  musicTimers.push(setTimeout(stopMusic, at + 200));
   updateAutoButtons();
 }
 
 function stopMusic() {
-  clearTimeout(musicTimer);
+  musicTimers.forEach(clearTimeout);
   musicKey = null;
   updateSound(STOP_SOUND);
   updateAutoButtons();
