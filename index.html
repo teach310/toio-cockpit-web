@@ -677,11 +677,12 @@ function sendMotor(left, right, force = false) {
     .finally(() => { motorQueued = false; });
 }
 
+// 送った音が toio に届いたら解決する Promise を返す
 function updateSound(data) {
-  if (!sound || data === lastSound) return;
+  if (!sound || data === lastSound) return Promise.resolve();
   lastSound = data;
   const s = sound;
-  enqueue(() => s.writeValueWithResponse(new Uint8Array(data))).catch(() => {});
+  return enqueue(() => s.writeValueWithResponse(new Uint8Array(data))).catch(() => {});
 }
 
 // クラクションボタンを押している間はクラクション。それ以外で後ろに動いている間はバック音
@@ -920,22 +921,23 @@ function stopMotion() {
   updateAutoButtons();
 }
 
-let musicTimers = [];
-function playMusic(key) {
-  musicTimers.forEach(clearTimeout);
+// toio は新しい音が届くと鳴っている音を上書きするので、分けた曲は順番待ちにする。
+// 次を送るのは、前の分が toio に届いてから鳴り終わるまで待ったあと
+let musicToken = 0;
+async function playMusic(key) {
+  const token = ++musicToken;
   musicKey = key;
-  let at = 0;
-  musicTimers = MUSIC[key].parts.map((part) => {
-    const t = setTimeout(() => updateSound(part.data), at);
-    at += part.ms;
-    return t;
-  });
-  musicTimers.push(setTimeout(stopMusic, at + 200));
   updateAutoButtons();
+  for (const part of MUSIC[key].parts) {
+    if (token !== musicToken) return;
+    await updateSound(part.data);
+    await sleep(part.ms);
+  }
+  if (token === musicToken) stopMusic();
 }
 
 function stopMusic() {
-  musicTimers.forEach(clearTimeout);
+  musicToken++;
   musicKey = null;
   updateSound(STOP_SOUND);
   updateAutoButtons();
